@@ -1,0 +1,99 @@
+stages:
+  - validate
+  - smoke
+  - regression
+  - report
+
+variables:
+  BASE_URL: "https://www.flipkart.com"
+  BROWSER: "chromium"
+  HEADLESS: "true"
+  MYSQL_HOST: "mysql"
+  MYSQL_PORT: "3306"
+  MYSQL_DATABASE: "flipkart_qa"
+  MYSQL_USER: "qa_user"
+  MYSQL_PASSWORD: "qa_password"
+  MYSQL_ROOT_PASSWORD: "local_root_password"
+  MYSQL_CONNECTION_LIMIT: "5"
+  npm_config_cache: "$CI_PROJECT_DIR/.npm"
+
+cache:
+  key:
+    files:
+      - package.json
+  paths:
+    - .npm/
+
+.default_playwright:
+  image: mcr.microsoft.com/playwright:v1.56.1-noble
+  services:
+    - name: mysql:8.4
+      alias: mysql
+  before_script:
+    - npm install
+    - npm run db:wait
+    - npm run db:migrate
+
+typecheck:
+  extends: .default_playwright
+  stage: validate
+  script:
+    - npm run typecheck
+
+lint:
+  extends: .default_playwright
+  stage: validate
+  script:
+    - npm run lint
+
+guest_smoke:
+  extends: .default_playwright
+  stage: smoke
+  script:
+    - npm run test:smoke
+  artifacts:
+    when: always
+    expire_in: 14 days
+    reports:
+      junit: reports/junit.xml
+    paths:
+      - reports/
+      - test-results/
+
+regression:
+  extends: .default_playwright
+  stage: regression
+  rules:
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+  script:
+    - npm run test:regression
+  artifacts:
+    when: always
+    expire_in: 30 days
+    reports:
+      junit: reports/junit.xml
+    paths:
+      - reports/
+      - test-results/
+
+publish_allure:
+  extends: .default_playwright
+  stage: report
+  when: always
+  needs:
+    - job: guest_smoke
+      artifacts: true
+  script:
+    - apt-get update && apt-get install -y default-jre-headless
+    - |
+      if [ -d reports/allure-results ] && [ "$(find reports/allure-results -type f | wc -l)" -gt 0 ]; then
+        npm run allure:generate
+      else
+        echo "No Allure result files were produced."
+      fi
+  artifacts:
+    when: always
+    expire_in: 30 days
+    paths:
+      - reports/allure-report/
+      - reports/allure-results/

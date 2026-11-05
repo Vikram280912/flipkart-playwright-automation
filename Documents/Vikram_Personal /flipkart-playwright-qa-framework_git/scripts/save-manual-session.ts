@@ -1,0 +1,14 @@
+import {chromium} from "@playwright/test";
+import {mkdir} from "node:fs/promises";
+import path from "node:path";
+import {env} from "../src/config/env.js";
+const browser=await chromium.launch({headless:false});
+const context=await browser.newContext();const page=await context.newPage();
+await page.goto(env.baseUrl,{waitUntil:"domcontentloaded"});
+console.log("Sign in manually if needed. Complete any OTP/CAPTCHA yourself.");
+console.log("Return to this terminal and press Enter when ready.");
+await new Promise<void>(resolve=>{process.stdin.resume();process.stdin.once("data",()=>resolve());});
+await mkdir(path.dirname(env.storageState),{recursive:true});
+await context.storageState({path:env.storageState});
+console.log(`Saved session at ${env.storageState}. Treat as a secret.`);
+await browser.close();

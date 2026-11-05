@@ -1,0 +1,30 @@
+pipeline {
+ agent any
+ options { timestamps(); buildDiscarder(logRotator(numToKeepStr:'25')); timeout(time:35,unit:'MINUTES') }
+ environment {
+  BASE_URL='https://www.flipkart.com'; HEADLESS='true'
+  MYSQL_HOST='127.0.0.1'; MYSQL_PORT='3307'; MYSQL_USER='qa_user'; MYSQL_DATABASE='flipkart_qa'
+ }
+ stages {
+  stage('Checkout'){steps{checkout scm}}
+  stage('Install'){steps{sh 'npm install'; sh 'npx playwright install --with-deps chromium'}}
+  stage('QA MySQL'){steps{
+   sh 'docker compose up -d mysql'
+   sh 'until docker compose exec -T mysql mysqladmin ping -h localhost -plocal_root_password --silent; do sleep 2; done'
+   sh 'npm run db:migrate'
+  }}
+  stage('Static checks'){parallel{
+   stage('TypeScript'){steps{sh 'npm run typecheck'}}
+   stage('Lint'){steps{sh 'npm run lint'}}
+  }}
+  stage('Guest smoke'){steps{sh 'npm run test:smoke'}}
+  stage('Regression'){when{branch 'main'} steps{sh 'npm run test:regression'}}
+ }
+ post {
+  always {
+   junit allowEmptyResults:true,testResults:'reports/junit.xml'
+   archiveArtifacts artifacts:'reports/**,test-results/**',allowEmptyArchive:true
+   sh 'docker compose down'
+  }
+ }
+}

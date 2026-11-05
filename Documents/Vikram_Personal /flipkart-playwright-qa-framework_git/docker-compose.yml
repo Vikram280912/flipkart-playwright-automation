@@ -1,0 +1,21 @@
+services:
+ mysql:
+  image:mysql:8.4
+  container_name:flipkart-qa-mysql
+  restart:unless-stopped
+  environment:
+   MYSQL_ROOT_PASSWORD:local_root_password
+   MYSQL_DATABASE:flipkart_qa
+   MYSQL_USER:qa_user
+   MYSQL_PASSWORD:qa_password
+  ports:["3307:3306"]
+  volumes:
+   - flipkart_qa_mysql:/var/lib/mysql
+   - ./database/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+  healthcheck:
+   test:["CMD","mysqladmin","ping","-h","localhost","-plocal_root_password"]
+   interval:5s
+   timeout:5s
+   retries:20
+volumes:
+ flipkart_qa_mysql:
